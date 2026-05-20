@@ -85,10 +85,13 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 def django_db_setup(django_test_environment, django_db_blocker):
     with django_db_blocker.unblock():
         from django.core.management import call_command
+        call_command("migrate", "--run-syncdb")
         call_command("loaddata", "myapp/fixtures/testdb.json")
 ```
 
 > `DJANGO_ALLOW_ASYNC_UNSAFE=true` és necessari perquè pytest-playwright executa els tests dins d'un event loop asíncron, i Django per defecte rebutja operacions síncrones de BD en aquest context.
+>
+> `migrate --run-syncdb` crea les taules de la BD de test abans de carregar el fixture. Cal fer-ho explícitament perquè estem sobreescrivint el `django_db_setup` de pytest-django, que normalment ja s'encarrega d'això.
 
 ---
 
@@ -166,10 +169,72 @@ pytest myapp/tests/test_functional.py --browser webkit
 
 ---
 
-### 8. Versionar els canvis
+### 8. Configurar GitHub Actions (CI)
+
+Crear el fitxer `.github/workflows/django.yml`:
+
+```yaml
+name: Django CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Cache Playwright Browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-chromium-${{ hashFiles('requirements.txt') }}
+    - name: Install Playwright Browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      run: playwright install --with-deps chromium
+    - name: Install Playwright System Dependencies
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: playwright install-deps chromium
+    - name: Run Tests
+      run: |
+        pytest myapp/tests/test_functional.py -v
+```
+
+**Notes importants respecte al workflow Selenium original:**
+
+| Selenium | Playwright |
+|---|---|
+| `MOZ_HEADLESS=1` a l'env | No cal (headless per defecte) |
+| `python manage.py test` | `pytest myapp/tests/test_functional.py -v` |
+| No cal instal·lar navegador | Cal `playwright install --with-deps chromium` |
+| `actions/setup-python@v3` | `actions/setup-python@v5` |
+
+> Usar la **cache** dels navegadors (`actions/cache@v4`) és essencial: sense ella, cada execució del CI descarrega ~290 MB de Chromium, cosa que causa timeouts.
+
+---
+
+### 9. Versionar els canvis
 
 ```bash
-git add myapp/tests/ myapp/fixtures/ conftest.py pytest.ini requirements.txt
+git add myapp/tests/ myapp/fixtures/ conftest.py pytest.ini requirements.txt .github/
 git commit -m "Afegir tests funcionals amb Playwright"
 git push
 ```
