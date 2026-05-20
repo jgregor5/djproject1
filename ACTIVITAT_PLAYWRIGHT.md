@@ -104,14 +104,17 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 @pytest.fixture(scope="session")
 def django_db_setup(django_test_environment, django_db_blocker):
     with django_db_blocker.unblock():
+        from django.test.utils import setup_databases
         from django.core.management import call_command
-        call_command("migrate", "--run-syncdb")
+        setup_databases(verbosity=0, interactive=False)
         call_command("loaddata", "myapp/fixtures/testdb.json")
 ```
 
 > `DJANGO_ALLOW_ASYNC_UNSAFE=true` és necessari perquè pytest-playwright executa els tests dins d'un event loop asíncron, i Django per defecte rebutja operacions síncrones de BD en aquest context.
 >
-> `migrate --run-syncdb` crea les taules de la BD de test abans de carregar el fixture. Cal fer-ho explícitament perquè estem sobreescrivint el `django_db_setup` de pytest-django, que normalment ja s'encarrega d'això.
+> `setup_databases()` crea la BD de test (en memòria si s'ha configurat `TEST: {'NAME': ':memory:'}`) i aplica totes les migracions. Cal cridar-ho explícitament perquè estem sobreescrivint el `django_db_setup` de pytest-django. Sense aquesta crida, `migrate` s'executaria contra la BD de producció en lloc de la BD de test.
+>
+> `loaddata` carrega el fixture un cop la BD de test ja existeix i té les taules creades.
 
 ---
 
