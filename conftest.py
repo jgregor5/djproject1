@@ -8,4 +8,5 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 def django_db_setup(django_test_environment, django_db_blocker):
     with django_db_blocker.unblock():
         from django.core.management import call_command
+        call_command("migrate", "--run-syncdb")
         call_command("loaddata", "myapp/fixtures/testdb.json")
