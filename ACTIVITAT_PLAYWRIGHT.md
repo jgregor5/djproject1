@@ -58,7 +58,27 @@ DJANGO_SETTINGS_MODULE = djproject1.settings
 
 ---
 
-### 4. Crear la base de dades de test (fixtures)
+### 4. Configurar la base de dades de test
+
+Afegir la clau `TEST` a `DATABASES` dins `djproject1/settings.py` perquè els tests usin sempre una BD en memòria, independent de la BD de producció:
+
+```python
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+        'TEST': {
+            'NAME': ':memory:',
+        },
+    }
+}
+```
+
+> Sense aquest ajust, en màquines on la BD de producció ja té dades, els tests poden fallar amb errors de clau duplicada.
+
+---
+
+### 5. Crear la base de dades de test (fixtures)
 
 ```bash
 ./manage.py createsuperuser --username isard
